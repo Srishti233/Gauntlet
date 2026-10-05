@@ -26,7 +26,6 @@ from gauntlet.oracles.checks import (
     firewall_bypass_oracle,
     tool_misuse_oracle,
 )
-from gauntlet.reporting.stats import wilson_interval
 from gauntlet.search.loop import run_search_for_seed
 from gauntlet.targets.factory import build_target
 
