@@ -58,16 +58,27 @@ services:
       retries: 10
 
   postgres:
-    image: postgres:16-alpine
+    # pgvector/pgvector:pg16, NOT plain postgres:16-alpine -- confirmed
+    # by Aegis's own docker-compose.yml. Aegis's semantic detector
+    # needs the pgvector extension for its attack-corpus similarity
+    # search; plain Postgres doesn't have it, so this image was wrong
+    # before this fix (an earlier plain postgres:16-alpine would most
+    # likely have let the container start, since the crash we actually
+    # observed in CI was the earlier, unrelated psycopg2 driver issue,
+    # but migrations or the semantic detector would very likely have
+    # failed later on "extension vector does not exist" once that was
+    # fixed -- this corrects it proactively rather than waiting for
+    # that failure).
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: aegis
       POSTGRES_PASSWORD: aegis
       POSTGRES_DB: aegis
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aegis"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U aegis -d aegis"]
+      interval: 3s
       timeout: 3s
-      retries: 10
+      retries: 20
 
   redis:
     image: redis:7-alpine
@@ -110,14 +121,36 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      # Aegis's README does not document a /health endpoint -- it
-      # documents /dashboard and /metrics. An earlier version of this
-      # file guessed /health, which likely 404s and would have left
-      # this healthcheck permanently failing (blocking agent-protected,
-      # which depends on it, from ever starting) even once the
-      # container itself was running fine. /metrics is the one
-      # confirmed-real, almost-certainly-unauthenticated endpoint.
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/metrics')"]
-      interval: 5s
+      # Checked against Aegis's own docker-compose.yml: its "gateway"
+      # service has NO healthcheck at all -- the author didn't
+      # define one, which means there's no confirmed "this route
+      # returns 200 when ready" endpoint to guess at. An earlier
+      # version of this file guessed /metrics; that's plausible
+      # (prometheus_client integrations are usually unauthenticated)
+      # but unconfirmed, and guessing a specific HTTP path risks the
+      # same failure mode as the earlier wrong /health guess: a
+      # permanently-failing healthcheck that blocks agent-protected
+      # (which depends on this being healthy) from ever starting, even
+      # once the container itself is running fine. A plain TCP
+      # connect-to-the-port check is weaker (it only proves uvicorn is
+      # listening, not that the app finished startup) but can't be
+      # wrong about which route exists, since it doesn't depend on one.
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8000), timeout=2).close()"]
+      interval: 3s
       timeout: 3s
-      retries: 15
+      retries: 20
+    volumes:
+      # Real Aegis's own docker-compose.yml mounts these two files
+      # the same way ("edit policy.yaml / rules.yaml on the host, then
+      # POST /admin/policy/reload"). policy.yaml below is a verbatim
+      # copy of the real file (see aegis-config/policy.yaml's own
+      # header comment for why it's here and what it does and doesn't
+      # prove). rules.yaml is NOT mounted, because its real content
+      # was never provided to this repo's author -- if Aegis's
+      # Dockerfile doesn't bake its own rules.yaml into the image
+      # (unconfirmed either way), the container will fail looking for
+      # /srv/rules.yaml, and the fix is to fetch the real rules.yaml
+      # from the Aegis repo, add it at aegis-config/rules.yaml, and
+      # uncomment the second line below.
+      - ./aegis-config/policy.yaml:/srv/policy.yaml:ro
+      # - ./aegis-config/rules.yaml:/srv/rules.yaml:ro
