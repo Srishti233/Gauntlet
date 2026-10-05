@@ -1,0 +1,99 @@
+version: "3.9"
+
+services:
+  gullible-llm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["uvicorn", "services.gullible_llm.app:app", "--host", "0.0.0.0", "--port", "9100"]
+    entrypoint: []
+    ports:
+      - "9100:9100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9100/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  agent-unprotected:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["uvicorn", "services.agent.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    entrypoint: []
+    environment:
+      LLM_URL: "http://gullible-llm:9100/v1/chat/completions"
+      LLM_KEY: ""
+    ports:
+      - "8001:8001"
+    depends_on:
+      gullible-llm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  agent-protected:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["uvicorn", "services.agent.app:app", "--host", "0.0.0.0", "--port", "8002"]
+    entrypoint: []
+    environment:
+      LLM_URL: "http://aegis:8080/v1/chat/completions"
+      LLM_KEY: "aegis-eval-key"
+    ports:
+      - "8002:8002"
+    depends_on:
+      aegis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aegis
+      POSTGRES_PASSWORD: aegis
+      POSTGRES_DB: aegis
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  aegis:
+    build:
+      context: ${AEGIS_REPO:-https://github.com/Srishti233/aegis.git#main}
+    environment:
+      UPSTREAM_URL: "http://gullible-llm:9100"
+      DEFAULT_MODEL: "gullible"
+      DATABASE_URL: "postgresql://aegis:aegis@postgres:5432/aegis"
+      REDIS_URL: "redis://redis:6379/0"
+    ports:
+      - "8080:8080"
+    depends_on:
+      gullible-llm:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 15

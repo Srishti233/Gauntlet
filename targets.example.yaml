@@ -1,0 +1,32 @@
+# Example standalone targets file. Referenced from run.yaml, or usable
+# on its own with `gauntlet list-attacks` style commands that only need
+# target metadata. All hosts here are localhost / Docker service names,
+# so they pass the allowlist without --i-own-this-target.
+
+targets:
+  - name: gullible-llm-direct
+    type: openai_compatible
+    base_url: http://localhost:9100
+    timeout_seconds: 15
+
+  - name: agent-unprotected
+    type: agent
+    base_url: http://localhost:8001
+    timeout_seconds: 30
+
+  - name: agent-protected
+    type: agent
+    base_url: http://localhost:8002
+    timeout_seconds: 30
+
+  - name: aegis-balanced
+    type: aegis
+    base_url: http://localhost:8080
+    api_key: aegis-eval-key
+    timeout_seconds: 30
+
+  - name: aegis-strict
+    type: aegis
+    base_url: http://localhost:8080
+    api_key: aegis-eval-key-strict
+    timeout_seconds: 30

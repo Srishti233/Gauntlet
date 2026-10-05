@@ -1,0 +1,38 @@
+# Example Gauntlet run config. Copy to run.yaml and edit, or pass this
+# file directly: `gauntlet run --config run.example.yaml`.
+
+seed: 1337
+mutation_depth: 2
+mutation_budget_per_seed: 40
+i_own_this_target: false  # all targets below are localhost, so this stays false
+
+budget:
+  max_requests_per_seed: 20
+  max_total_requests: 2000
+  max_wall_clock_seconds: 1800
+
+# categories: null means "run every category". Uncomment to restrict:
+# categories: [instruction_override, role_jailbreak]
+
+targets:
+  - name: agent-unprotected
+    type: agent
+    base_url: http://localhost:8001
+    timeout_seconds: 30
+
+  - name: agent-protected
+    type: agent
+    base_url: http://localhost:8002
+    timeout_seconds: 30
+
+  - name: aegis-balanced
+    type: aegis
+    base_url: http://localhost:8080
+    api_key: aegis-eval-key
+    timeout_seconds: 30
+
+  - name: aegis-strict
+    type: aegis
+    base_url: http://localhost:8080
+    api_key: aegis-eval-key-strict
+    timeout_seconds: 30
