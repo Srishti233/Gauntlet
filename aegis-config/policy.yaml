@@ -1,0 +1,80 @@
+# NOTE from Gauntlet: this file is a verbatim copy of Aegis's own
+# policy.yaml, pasted in by the person running this repo from the real
+# Aegis project (not written or guessed by Gauntlet's author). It is
+# mounted read-only into the aegis container at /srv/policy.yaml in
+# docker-compose.yml.
+#
+# Why it's here at all: Aegis's own docker-compose.yml mounts this
+# file from the host the same way ("edit policy.yaml / rules.yaml on
+# the host, then POST /admin/policy/reload"), which could mean either
+# (a) the file is also baked into the image at build time via the
+# Dockerfile, and the mount is only a live-editing convenience, or (b)
+# the app genuinely expects to find it at /srv/policy.yaml at runtime
+# and isn't guaranteed to ship a copy inside the image itself. Gauntlet
+# builds Aegis straight from git with no host checkout to mount from,
+# so without this file committed here and mounted, case (b) would
+# crash the container on startup with a missing-file error. If it
+# turns out the Dockerfile already bakes this in (case (a)), mounting
+# an identical copy over it changes nothing -- this is a defensive
+# addition, not a guess at Aegis's content (every line below is
+# copied from the real file).
+#
+# See docker-compose.yml for the mount, and README.md's "Bugs found
+# during review" section for the rest of this story. rules.yaml is NOT
+# included here, because its real content was never provided to
+# Gauntlet's author -- see the comment in docker-compose.yml next to
+# the (intentionally absent) rules.yaml mount.
+
+version: 1
+default_mode: balanced
+
+defaults:
+  enforce: true
+  block_threshold: 0.40      # combined injection risk >= this -> block
+  flag_threshold: 0.20       # >= this -> allowed but flagged in audit log
+  weights:                   # how detectors combine: risk = 1 - (1-rules)(1-w_sem*sem)(1-w_heur*heur)
+    semantic: 0.9
+    heuristic: 0.3
+  semantic:                  # cosine similarity -> 0..1 score, linear between low and high
+    low: 0.50
+    high: 0.80
+  output_semantic:
+    low: 0.60
+    high: 0.90
+  category_thresholds: {}    # e.g. {encoded_payload: 0.5} blocks if that category's own score reaches it
+  secret_actions:            # block | redact | flag   (applies to input and output unless overridden)
+    default: flag
+    OPENAI_KEY: redact
+    AWS_KEY: redact
+    GITHUB_TOKEN: redact
+    GOOGLE_KEY: redact
+    STRIPE_KEY: redact
+    SLACK_TOKEN: redact
+    JWT: redact
+    GENERIC_SECRET: redact
+    PRIVATE_KEY: block
+    CREDIT_CARD: redact
+    GOV_ID: redact
+    EMAIL: flag
+    PHONE: flag
+    HIGH_ENTROPY: flag
+  output_actions:
+    canary_leak: block           # per-request canary found in the model output
+    jailbreak_success: block     # rules/semantic say the model gave in
+    exfiltration: block          # markdown/HTML image or link smuggling data to non-allowlisted domains
+    jailbreak_threshold: 0.60
+  escalation:
+    max_bonus: 0.30              # added to risk after repeated blocked attempts from one key
+
+modes:
+  monitor:
+    enforce: false               # nothing is blocked or modified; decisions are logged as would_block
+  balanced: {}
+  strict:
+    block_threshold: 0.30
+    flag_threshold: 0.15
+    category_thresholds: {encoded_payload: 0.5, tool_hijacking: 0.5}
+    secret_actions:
+      EMAIL: redact
+      PHONE: redact
+      HIGH_ENTROPY: redact
