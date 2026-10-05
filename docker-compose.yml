@@ -40,7 +40,11 @@ services:
     command: ["uvicorn", "services.agent.app:app", "--host", "0.0.0.0", "--port", "8002"]
     entrypoint: []
     environment:
-      LLM_URL: "http://aegis:8080/v1/chat/completions"
+      # Port 8000, not 8080 -- confirmed by Aegis's own README ("Gateway:
+      # http://localhost:8000"). The key value matches EVAL_API_KEY,
+      # which we set explicitly below on the aegis service itself,
+      # rather than guessing at an undocumented default.
+      LLM_URL: "http://aegis:8000/v1/chat/completions"
       LLM_KEY: "aegis-eval-key"
     ports:
       - "8002:8002"
@@ -79,21 +83,25 @@ services:
     environment:
       UPSTREAM_URL: "http://gullible-llm:9100"
       DEFAULT_MODEL: "gullible"
-      # NOTE: plain "postgresql://" makes SQLAlchemy default to the
-      # psycopg2 driver, which Aegis's container image does not have
-      # installed (confirmed by a real CI run: "ModuleNotFoundError:
-      # No module named 'psycopg2'" at startup, inside sync
-      # create_engine()). "postgresql+psycopg://" asks for psycopg
-      # (v3) instead, which is what most FastAPI/SQLAlchemy stacks
-      # built in the last couple of years ship by default. If Aegis's
-      # image instead bundles psycopg2-binary under a different URL
-      # scheme, or expects a different env var name entirely, check
-      # Aegis's own README/requirements -- this one line is a guess
-      # made without ever seeing that repo directly.
+      # psycopg (v3), confirmed by Aegis's own requirements.txt
+      # (psycopg[binary]==3.2.3) -- an earlier plain "postgresql://"
+      # URL made SQLAlchemy default to psycopg2, which isn't installed,
+      # and crashed the container; this was caught by a real CI run.
       DATABASE_URL: "postgresql+psycopg://aegis:aegis@postgres:5432/aegis"
       REDIS_URL: "redis://redis:6379/0"
+      # Aegis's README documents these as configurable env vars but
+      # does not state their literal default values, so they are set
+      # explicitly here rather than guessed. agent-protected's LLM_KEY
+      # above, and the aegis targets in run.example.yaml /
+      # targets.example.yaml, are written to match these exact values.
+      DEMO_API_KEY: "aegis-demo-key"
+      EVAL_API_KEY: "aegis-eval-key"
+      ADMIN_API_KEY: "aegis-admin-change-me"
     ports:
-      - "8080:8080"
+      # Port 8000, not 8080 -- confirmed by Aegis's own README
+      # ("Gateway: http://localhost:8000"). An earlier version of this
+      # file guessed 8080, which was wrong.
+      - "8000:8000"
     depends_on:
       gullible-llm:
         condition: service_healthy
@@ -102,7 +110,14 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      # Aegis's README does not document a /health endpoint -- it
+      # documents /dashboard and /metrics. An earlier version of this
+      # file guessed /health, which likely 404s and would have left
+      # this healthcheck permanently failing (blocking agent-protected,
+      # which depends on it, from ever starting) even once the
+      # container itself was running fine. /metrics is the one
+      # confirmed-real, almost-certainly-unauthenticated endpoint.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/metrics')"]
       interval: 5s
       timeout: 3s
       retries: 15
