@@ -25,14 +25,21 @@ targets:
     base_url: http://localhost:8002
     timeout_seconds: 30
 
-  - name: aegis-balanced
+  - name: aegis
     type: aegis
-    base_url: http://localhost:8080
+    # Port 8000, confirmed by Aegis's own README ("Gateway:
+    # http://localhost:8000"); an earlier version of this file guessed
+    # 8080, which was wrong.
+    base_url: http://localhost:8000
     api_key: aegis-eval-key
     timeout_seconds: 30
 
-  - name: aegis-strict
-    type: aegis
-    base_url: http://localhost:8080
-    api_key: aegis-eval-key-strict
-    timeout_seconds: 30
+# A single "strict" mode comparison (aegis-balanced vs aegis-strict via
+# two different API keys) was in an earlier version of this file, but
+# that assumed Aegis switches mode per-key. Aegis's real README says
+# mode is set in policy.yaml (monitor/balanced/strict), with optional
+# per-key override via api_keys.policy_override -- not via separate
+# hardcoded key strings. Comparing balanced vs strict for real would
+# need either a second Aegis container built from a policy.yaml with
+# mode: strict, or configuring policy_override for a dedicated key;
+# neither was set up here (see README Limitations).
