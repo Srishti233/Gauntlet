@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   gullible-llm:
     build:
@@ -81,7 +79,18 @@ services:
     environment:
       UPSTREAM_URL: "http://gullible-llm:9100"
       DEFAULT_MODEL: "gullible"
-      DATABASE_URL: "postgresql://aegis:aegis@postgres:5432/aegis"
+      # NOTE: plain "postgresql://" makes SQLAlchemy default to the
+      # psycopg2 driver, which Aegis's container image does not have
+      # installed (confirmed by a real CI run: "ModuleNotFoundError:
+      # No module named 'psycopg2'" at startup, inside sync
+      # create_engine()). "postgresql+psycopg://" asks for psycopg
+      # (v3) instead, which is what most FastAPI/SQLAlchemy stacks
+      # built in the last couple of years ship by default. If Aegis's
+      # image instead bundles psycopg2-binary under a different URL
+      # scheme, or expects a different env var name entirely, check
+      # Aegis's own README/requirements -- this one line is a guess
+      # made without ever seeing that repo directly.
+      DATABASE_URL: "postgresql+psycopg://aegis:aegis@postgres:5432/aegis"
       REDIS_URL: "redis://redis:6379/0"
     ports:
       - "8080:8080"
