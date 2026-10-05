@@ -19,14 +19,12 @@ targets:
     base_url: http://localhost:8002
     timeout_seconds: 30
 
-  - name: aegis-balanced
+  - name: aegis
     type: aegis
-    base_url: http://localhost:8080
+    # Port 8000, confirmed by Aegis's own README; see run.example.yaml
+    # for the full note on this and on why there's only one Aegis
+    # target here (no separate "strict" key -- Aegis sets mode via
+    # policy.yaml, not per-key).
+    base_url: http://localhost:8000
     api_key: aegis-eval-key
-    timeout_seconds: 30
-
-  - name: aegis-strict
-    type: aegis
-    base_url: http://localhost:8080
-    api_key: aegis-eval-key-strict
     timeout_seconds: 30
